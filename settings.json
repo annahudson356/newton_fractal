@@ -1,0 +1,7 @@
+{
+  "cmake.generator": null,
+  "windows": {
+    "cmake.generator": "Visual Studio 17 2022",
+    "cmake.platform": "x64"
+  }
+}
