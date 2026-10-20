@@ -1,0 +1,51 @@
+#version 450
+
+//--------------------------------------------------------------------------------------//
+// PART B: YOUR COMPUTE CANVAS
+//--------------------------------------------------------------------------------------//
+// The real meat of the assignment. Your goal is to create something visually compelling
+// that meets two of the three feature requirements and some more general requirements:
+//
+// Every visible pixel must be computed within the shader, rather than supplied to it.
+// Ping-pong buffers do not count, since the prior result was also computed by the same
+// shader.
+//
+// Pixel color depends in some form on pixel position. This could be from a more
+// generalized coordinate system or directly from the integer coordinates of the pixel.
+//
+// The effect differs significantly from the provided shader and from your Assignment2
+// implementation in nature.
+//
+// The effect is somewhat based on an existing procedural artistic concept. Pixel values
+// cannot be hard-coded and must be derived from some calculation/algorithm.
+//
+// If you have an idea that you believe may not fully meet these requirements but still
+// has artistic and intellectual merit, please reach out to me directly for idea approval.
+//
+// You are not required to use a single compute shader, though it is highly encouraged.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D out_image;
+
+layout(push_constant) uniform PushConstants {
+    int width;
+    int height;
+} pc;
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+
+    float two_pi = 6.28318530718;
+    float x_norm = pixel.x / (pc.width - 1.0);
+    float y_norm = pixel.y / (pc.height - 1.0);
+
+    float red_wave = 0.5 + 0.5 * sin(two_pi * (x_norm + y_norm));
+    float green_wave = 0.5 + 0.5 * sin(two_pi * y_norm);
+    float blue_wave = 0.5 + 0.5 * cos(two_pi * x_norm);
+
+    vec4 color = {red_wave, green_wave, blue_wave, 1.0};
+
+    imageStore(out_image, pixel, color);
+}
