@@ -36,6 +36,20 @@ static const uint32_t FRAME_HEIGHT = WINDOW_HEIGHT;
 static const uint32_t FRAMES_IN_FLIGHT = 3;
 static const char* COMPUTE_SHADER_PATH = SHADER_DIR "/myshader.comp.spv";
 
+struct PushConstants {
+    int   width;
+    int   height;
+    double center_x;
+    double center_y;
+    double scale;
+    double root_x;
+    double root_y;
+    int   max_iter;
+};
+
+static double g_scroll_y = 0.0;
+static void scroll_callback(GLFWwindow*, double, double yoffset) { g_scroll_y += yoffset; }
+
 //validation layers pass debug messages to this function
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
                                            VkDebugUtilsMessageTypeFlagsEXT message_types,
@@ -151,6 +165,7 @@ int main()
         std::fprintf(stderr, "glfwCreateWindow failed\n");
         return EXIT_FAILURE;
     }
+    glfwSetScrollCallback(window, scroll_callback);
 
     ValidationLog() << "=== VALIDATION LOG: " << window_title << " ===\n" << std::flush;
     std::fprintf(stderr, "[info] validation log location: %s\n", std::filesystem::absolute("validation.txt").string().c_str());
@@ -672,7 +687,7 @@ int main()
     VkPushConstantRange push_constant_range = {
         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
         .offset = 0,
-        .size = sizeof(int) * 2,
+        .size = sizeof(PushConstants),
     };
 
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
@@ -733,7 +748,8 @@ int main()
 
     VkFenceCreateInfo command_buffer_fence_info = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        // changed 
+        .flags = 0,
     };
 
     std::vector<VkSemaphore> image_available_semaphore(FRAMES_IN_FLIGHT);
@@ -867,8 +883,66 @@ int main()
     // not resolve new detail and was just a simple crop of the blit. I imagine your
     // implementation of this feature would leave the blit dimensions alone.
 
+    VkImageSubresourceRange subresource_range = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+
+    // One-time UNDEFINED -> GENERAL transition for every frame image
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+        VK_CHECK(vkResetCommandBuffer(command_buffers[i], 0));
+
+        VkCommandBufferBeginInfo begin_info = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = NULL,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
+        VK_CHECK(vkBeginCommandBuffer(command_buffers[i], &begin_info));
+
+        VkImageMemoryBarrier2 init_barrier = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = NULL,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = frame[i],
+            .subresourceRange = subresource_range,
+        };
+
+        VkDependencyInfo init_dependency = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &init_barrier,
+        };
+        vkCmdPipelineBarrier2(command_buffers[i], &init_dependency);
+
+        VK_CHECK(vkEndCommandBuffer(command_buffers[i]));
+
+        VkCommandBufferSubmitInfo init_cb_info = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = command_buffers[i],
+        };
+        VkSubmitInfo2 init_submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .commandBufferInfoCount = 1,
+            .pCommandBufferInfos = &init_cb_info,
+        };
+        VK_CHECK(vkQueueSubmit2(queue, 1, &init_submit, in_flight_fence[i]));
+    }
 
     bool space_pressed = false;
+
+    const float DEFAULT_SCALE = 4.0f / FRAME_HEIGHT; // view is 4 units tall
+    float center_x = 0.f, center_y = 0.f, scale = DEFAULT_SCALE;
+    float root_x = 1.f, root_y = 0.f;
 
     uint32_t current_frame = 0;
     uint64_t total_frames = 0;
@@ -891,12 +965,6 @@ int main()
             return EXIT_FAILURE;
         }
 
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !space_pressed) {
-            //logic for pressing the space bar would go here
-        }
-
-        space_pressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS); //must happen after the logic
-
         VK_CHECK(vkResetCommandBuffer(command_buffers[current_frame], 0));
 
         VkCommandBufferBeginInfo command_buffer_begin_info = {
@@ -907,50 +975,59 @@ int main()
 
         VK_CHECK(vkBeginCommandBuffer(command_buffers[current_frame], &command_buffer_begin_info));
 
-        VkImageSubresourceRange subresource_range = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
+
+        // delta_ms starts out as start_ms (huge), so clamp for the first frame
+        float dt = fminf((float)delta_ms.count() / 1000.f, 0.1f);
+
+        double cur_x, cur_y;
+        glfwGetCursorPos(window, &cur_x, &cur_y);
+        // window coords -> frame pixels (safe on high-DPI too)
+        float px = (float)(cur_x / WINDOW_WIDTH)  * FRAME_WIDTH;
+        float py = (float)(cur_y / WINDOW_HEIGHT) * FRAME_HEIGHT;
+        float cursor_wx = center_x + (px - FRAME_WIDTH  * 0.5f) * scale;
+        float cursor_wy = center_y - (py - FRAME_HEIGHT * 0.5f) * scale;
+
+        // zoom toward the cursor
+        if (g_scroll_y != 0.0) {
+            float new_scale = scale * powf(0.85f, (float)g_scroll_y);
+            float ratio = new_scale / scale;
+            center_x = cursor_wx + (center_x - cursor_wx) * ratio;
+            center_y = cursor_wy + (center_y - cursor_wy) * ratio;
+            scale = new_scale;
+            g_scroll_y = 0.0;
+        }
+
+        // pan
+        float pan = 300.f * scale * dt;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) center_y += pan;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) center_y -= pan;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) center_x -= pan;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) center_x += pan;
+
+        // Feature 2: drag root r0 with the cursor
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            root_x = cursor_wx;
+            root_y = cursor_wy;
+        }
+
+        // space: reset
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !space_pressed) {
+            center_x = center_y = 0.f;
+            scale = DEFAULT_SCALE;
+            root_x = 1.f; root_y = 0.f;
+        }
+        space_pressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+
+        int max_iter = 100 + (int)(30.f * log2f(DEFAULT_SCALE / scale));
+        if (max_iter < 100) max_iter = 100;
+        if (max_iter > 1000) max_iter = 1000;
+
+        PushConstants pc = {
+            (int)FRAME_WIDTH, (int)FRAME_HEIGHT,
+            center_x, center_y, scale,
+            root_x, root_y,
+            max_iter
         };
-
-        VkImageMemoryBarrier2 barrier_storage_to_transfer_dst = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = NULL,
-
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-
-            .image = frame[current_frame],
-            .subresourceRange = subresource_range,
-        };
-
-        VkDependencyInfo dependency_info_storage_to_transfer_dst = {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = NULL,
-            .dependencyFlags = 0,
-            .memoryBarrierCount = 0,
-            .pMemoryBarriers = nullptr,
-            .bufferMemoryBarrierCount = 0,
-            .pBufferMemoryBarriers = nullptr,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier_storage_to_transfer_dst,
-        };
-
-        vkCmdPipelineBarrier2(command_buffers[current_frame], &dependency_info_storage_to_transfer_dst);
-
-
-        int pc[] = {(int)FRAME_WIDTH, (int)FRAME_HEIGHT};
 
         vkCmdBindPipeline(command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
         vkCmdBindDescriptorSets(command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set[current_frame], 0, nullptr);
@@ -1059,8 +1136,8 @@ int main()
             .srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
             .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
 
-            .dstStageMask = VK_PIPELINE_STAGE_2_CLEAR_BIT,
-            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 
             .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
