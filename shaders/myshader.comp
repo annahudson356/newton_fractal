@@ -101,21 +101,19 @@ void main()
     }
 
     vec3 rgb = vec3(0.0);
-    if (converged) {
-        dvec2 d = z - m;
-        int k;
-        if (dot(d, d) < 1e-8lf) {
-            k = N; 
-        } else {
-            float ang = atan(float(z.y), float(z.x));
-            k = int(round(ang / (TWO_PI / float(N))));
-            k = ((k % N) + N) % N;
-        }
-
-        float t = float(k) / float(N);
-        float shade = 0.85 + 0.15 * pow(0.98, float(iter));
-        rgb = palette(t);
+    dvec2 d = z - m;
+    int k;
+    if (dot(d, d) < 1e-8lf) {
+        k = N; 
+    } else {
+        float ang = atan(float(z.y), float(z.x));
+        k = int(round(ang / (TWO_PI / float(N))));
+        k = ((k % N) + N) % N;
     }
+
+    float t = float(k) / float(N);
+    float shade = 0.85 + 0.15 * pow(0.98, float(iter));
+    rgb = palette(t);
 
     imageStore(out_image, pixel, vec4(rgb, 1.0));
 }
