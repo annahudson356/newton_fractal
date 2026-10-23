@@ -87,9 +87,6 @@ void main()
     int iter = 0;
 
     for (; iter < pc.max_iter; ++iter) {
-        if (dot(z, z) < 1e-24lf) break;        // near 0
-        if (dot(z, z) > 1e12lf)  break;        // diverged
-
         dvec2 z2 = cmul(z, z);
         dvec2 z4 = cmul(z2, z2);
 

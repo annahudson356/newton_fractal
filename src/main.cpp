@@ -947,11 +947,11 @@ int main()
         VK_CHECK(vkQueueSubmit2(queue, 1, &init_submit, in_flight_fence[i]));
     }
 
+    // Feature 2 variables needed to go here
+    double root_x = 1.0, root_y = 0.0; 
     bool space_pressed = false;
-
-    const float DEFAULT_SCALE = 4.0f / FRAME_HEIGHT; // view is 4 units tall
-    float center_x = 0.f, center_y = 0.f, scale = DEFAULT_SCALE;
-    float root_x = 1.f, root_y = 0.f;
+    double DEFAULT_SCALE = 4.0f / FRAME_HEIGHT;
+    double center_x = 0.f, center_y = 0.f, scale = DEFAULT_SCALE;
 
     uint32_t current_frame = 0;
     uint64_t total_frames = 0;
@@ -959,6 +959,8 @@ int main()
     std::chrono::milliseconds curr_ms, end_ms;
     std::chrono::milliseconds last_frame_ms = start_ms;
     std::chrono::milliseconds delta_ms = start_ms;
+
+
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -986,20 +988,20 @@ int main()
 
 
         // delta_ms starts out as start_ms (huge), so clamp for the first frame
-        float dt = fminf((float)delta_ms.count() / 1000.f, 0.1f);
+        double dt = fminf((double)delta_ms.count() / 1000.f, 0.1f);
 
         double cur_x, cur_y;
         glfwGetCursorPos(window, &cur_x, &cur_y);
-        // window coords -> frame pixels (safe on high-DPI too)
-        float px = (float)(cur_x / WINDOW_WIDTH)  * FRAME_WIDTH;
-        float py = (float)(cur_y / WINDOW_HEIGHT) * FRAME_HEIGHT;
-        float cursor_wx = center_x + (px - FRAME_WIDTH  * 0.5f) * scale;
-        float cursor_wy = center_y - (py - FRAME_HEIGHT * 0.5f) * scale;
+
+        double px = (double)(cur_x / WINDOW_WIDTH)  * FRAME_WIDTH;
+        double py = (double)(cur_y / WINDOW_HEIGHT) * FRAME_HEIGHT;
+        double cursor_wx = center_x + (px - FRAME_WIDTH  * 0.5f) * scale;
+        double cursor_wy = center_y - (py - FRAME_HEIGHT * 0.5f) * scale;
 
         // zoom toward the cursor
-        if (g_scroll_y != 0.0) {
-            float new_scale = scale * powf(0.85f, (float)g_scroll_y);
-            float ratio = new_scale / scale;
+        if (scrollwheel_y != 0.0) {
+            double new_scale = scale * powf(0.85f, (double)scrollwheel_y);
+            double ratio = new_scale / scale;
             center_x = cursor_wx + (center_x - cursor_wx) * ratio;
             center_y = cursor_wy + (center_y - cursor_wy) * ratio;
             scale = new_scale;
@@ -1007,25 +1009,31 @@ int main()
         }
 
         // Make it so the arrow keys can be used to pan around the window
-        float pan = 300.f * scale * dt;
+        double pan = 300.0 * scale * dt;
         if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) center_y += pan;
         if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) center_y -= pan;
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) center_x -= pan;
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) center_x += pan;
 
         // Feature 2: Make nova swirl based on mouse position
-        double root_x = 1e9, root_y = 0.0;
 
         bool cursor_inside = cur_x >= 0.0 && cur_x < WINDOW_WIDTH &&
                      cur_y >= 0.0 && cur_y < WINDOW_HEIGHT;
 
-        if (cursor_inside) {
+        // Only on click does the nova swirl happen
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             double nx =  (cur_x / WINDOW_WIDTH)  * 2.0 - 1.0;
             double ny = -((cur_y / WINDOW_HEIGHT) * 2.0 - 1.0);
+            // Clamp so that really small values are ignored
+            nx = fmax(-1.0, fmin(1.0, nx));
+            ny = fmax(-1.0, fmin(1.0, ny));
+
             root_x = 1.0 + 0.6 * nx;
             root_y = 0.8 * ny;
-        }else{
-            root_x = 1.0; root_y = 0.0;
+        }else {
+            double k = fmin(1.0, 4.0 * dt);
+            root_x += (1.0 - root_x) * k;
+            root_y += (0.0 - root_y) * k;
         }
 
         // Pressing space resets the image
