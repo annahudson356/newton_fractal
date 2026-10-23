@@ -48,8 +48,8 @@ struct PushConstants {
     int   max_iter;
 };
 
-static double g_scroll_y = 0.0;
-static void scroll_callback(GLFWwindow*, double, double yoffset) { g_scroll_y += yoffset; }
+static double scrollwheel_y= 0.0;
+static void scroll_callback(GLFWwindow*, double, double yoffset) {scrollwheel_y+= yoffset; }
 
 //validation layers pass debug messages to this function
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
@@ -1003,17 +1003,17 @@ int main()
             center_x = cursor_wx + (center_x - cursor_wx) * ratio;
             center_y = cursor_wy + (center_y - cursor_wy) * ratio;
             scale = new_scale;
-            g_scroll_y = 0.0;
+           scrollwheel_y= 0.0;
         }
 
-        // pan
+        // Make it so the arrow keys can be used to pan around the window
         float pan = 300.f * scale * dt;
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) center_y += pan;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) center_y -= pan;
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) center_x -= pan;
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) center_x += pan;
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) center_y += pan;
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) center_y -= pan;
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) center_x -= pan;
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) center_x += pan;
 
-        // Feature 2: drag root r0 with the cursor
+        // Feature 2: Make nova swirl based on mouse position
         double root_x = 1e9, root_y = 0.0;
 
         bool cursor_inside = cur_x >= 0.0 && cur_x < WINDOW_WIDTH &&
@@ -1028,7 +1028,7 @@ int main()
             root_x = 1.0; root_y = 0.0;
         }
 
-        // space: reset
+        // Pressing space resets the image
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !space_pressed) {
             center_x = center_y = 0.f;
             scale = DEFAULT_SCALE;
