@@ -1006,8 +1006,11 @@ int main()
 
         // Feature 2: drag root r0 with the cursor
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            root_x = cursor_wx;
-            root_y = cursor_wy;
+            double rx = cursor_wx, ry = cursor_wy;
+            double r2x = rx*rx - ry*ry,   r2y = 2*rx*ry;      // r^2
+            double r4x = r2x*r2x - r2y*r2y, r4y = 2*r2x*r2y;  // r^4
+            root_x = r4x*rx - r4y*ry;                          // r^5 = r^4 * r
+            root_y = r4x*ry + r4y*rx;
         }
 
         // space: reset

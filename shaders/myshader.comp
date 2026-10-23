@@ -24,6 +24,8 @@
 //
 // You are not required to use a single compute shader, though it is highly encouraged.
 
+// Anna Hudson 44277461
+
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, rgba8) uniform writeonly image2D out_image;
@@ -33,22 +35,40 @@ layout(push_constant) uniform PushConstants {
     double center_x;
     double center_y;
     double scale;
-    double root_x;   // c.x  (p(z) = z^10 - c)
-    double root_y;   // c.y
+    double root_x;
+    double root_y;
     int   max_iter;
 } pc;
 
-const float A = 1.0;            // relaxation: z <- z - A * p/p'
-const float TWO_PI = 6.28318530718;
-const int   N = 10;
+// Controls how quickly the image scales down
+float A = 0.5;
 
-vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
-vec2 cinv(vec2 a)         { return vec2(a.x, -a.y) / dot(a, a); }
+float TWO_PI = 6.28318530718;
+int   N = 5;
 
-vec3 hsv2rgb(vec3 c)
+// Complex multiplication
+dvec2 cmul(dvec2 a, dvec2 b) { 
+    return dvec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); 
+}
+
+// Complex inverse (1/z)
+dvec2 cinv(dvec2 a){ 
+    return dvec2(a.x, -a.y) / dot(a, a); 
+}
+
+// Create a color palette
+// Reference: https://www.stevenfrady.com/tools/palette
+vec3 palette(float t)
 {
-    vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
-    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+    // offset
+    vec3 a = vec3(0.85, 0.80, 0.90);
+    // amplitude
+    vec3 b = vec3(0.15, 0.15, 0.15);
+    // frequency
+    vec3 c = vec3(1.0, 1.0, 1.0);
+    // phase
+    vec3 d = vec3(0.00, 0.33, 0.67);
+    return a + b * cos(TWO_PI * (c * t + d));
 }
 
 void main()
@@ -56,40 +76,40 @@ void main()
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     if (pixel.x >= pc.width || pixel.y >= pc.height) return;
 
-    vec2 z = vec2(pc.center_x + (pixel.x + 0.5 - 0.5 * pc.width)  * pc.scale,
-                  pc.center_y - (pixel.y + 0.5 - 0.5 * pc.height) * pc.scale);
-    vec2 c = vec2(pc.root_x, pc.root_y);
+    dvec2 z = dvec2(
+        pc.center_x + (double(pixel.x) + 0.5lf - 0.5lf * double(pc.width))  * pc.scale,
+        pc.center_y - (double(pixel.y) + 0.5lf - 0.5lf * double(pc.height)) * pc.scale);
+    dvec2 c = dvec2(pc.root_x, pc.root_y);
 
     bool converged = false;
     int iter = 0;
 
     for (; iter < pc.max_iter; ++iter) {
-        if (dot(z, z) < 1e-12) break;                 // z ~ 0: p'(z) ~ 0
+        if (dot(z, z) < 1e-12) break;// z ~ 0: p'(z) ~ 0
 
-        // z^9 by repeated squaring
-        vec2 z2 = cmul(z, z);
-        vec2 z4 = cmul(z2, z2);
-        vec2 z8 = cmul(z4, z4);
-        vec2 z9 = cmul(z8, z);
+        // z^4 by repeated squaring
+        dvec2 z2 = cmul(z, z);
+        dvec2 z4 = cmul(z2, z2);
 
-        // p/p' = (z^10 - c) / (10 z^9) = (z - c / z^9) / 10
-        vec2 step = A * (z - cmul(c, cinv(z9))) / float(N);
+        dvec2 step = double(A) * (z - cmul(c, cinv(z4))) / double(N);
         z -= step;
 
-        if (dot(step, step) < 1e-12) { converged = true; break; }
+        if (dot(step, step) < 1e-24lf) { 
+            converged = true; 
+            break; 
+        }
     }
 
     vec3 rgb = vec3(0.0);
     if (converged) {
-        // which root? roots are at angle (arg(c) + 2*pi*k) / 10
-        float ang  = atan(z.y, z.x);
-        float cang = atan(c.y, c.x);
+        float ang  = atan(float(z.y), float(z.x));
+        float cang = atan(float(c.y), float(c.x));
         int k = int(round((ang - cang / float(N)) / (TWO_PI / float(N))));
-        k -= N * int(floor(float(k) / float(N)));     // wrap to 0..9
+        k = ((k % N) + N) % N;
 
-        float hue = float(k) / float(N);
-        float shade = 0.35 + 0.65 * pow(0.93, float(iter)); // slow convergence = darker
-        rgb = hsv2rgb(vec3(hue, 0.75, shade));
+        float t = float(k) / float(N);
+        float shade = 0.85 + 0.15 * pow(0.98, float(iter));
+        rgb = palette(t);
     }
 
     imageStore(out_image, pixel, vec4(rgb, 1.0));
