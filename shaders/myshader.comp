@@ -41,7 +41,7 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 // Controls how quickly the image scales down
-float A = 0.5;
+float A = 1;
 
 float TWO_PI = 6.28318530718;
 int   N = 5;
@@ -79,33 +79,38 @@ void main()
     dvec2 z = dvec2(
         pc.center_x + (double(pixel.x) + 0.5lf - 0.5lf * double(pc.width))  * pc.scale,
         pc.center_y - (double(pixel.y) + 0.5lf - 0.5lf * double(pc.height)) * pc.scale);
-    dvec2 c = dvec2(pc.root_x, pc.root_y);
+    dvec2 m = dvec2(pc.root_x, pc.root_y);
+    dvec2 one = dvec2(1.0lf, 0.0lf);
+    dvec2 Ac = dvec2(pc.root_x, pc.root_y);  
 
     bool converged = false;
     int iter = 0;
 
     for (; iter < pc.max_iter; ++iter) {
-        if (dot(z, z) < 1e-12) break;// z ~ 0: p'(z) ~ 0
+        if (dot(z, z) < 1e-24lf) break;        // near 0
+        if (dot(z, z) > 1e12lf)  break;        // diverged
 
-        // z^4 by repeated squaring
         dvec2 z2 = cmul(z, z);
         dvec2 z4 = cmul(z2, z2);
 
-        dvec2 step = double(A) * (z - cmul(c, cinv(z4))) / double(N);
-        z -= step;
+        // Newton step for z^5 - 1:  (z - 1/z^4) / 5, scaled by complex A
+        dvec2 stepv = cmul(Ac, (z - cinv(z4)) / double(N));
+        z -= stepv;
 
-        if (dot(step, step) < 1e-24lf) { 
-            converged = true; 
-            break; 
-        }
+        if (dot(stepv, stepv) < 1e-24lf) { converged = true; break; }
     }
 
     vec3 rgb = vec3(0.0);
     if (converged) {
-        float ang  = atan(float(z.y), float(z.x));
-        float cang = atan(float(c.y), float(c.x));
-        int k = int(round((ang - cang / float(N)) / (TWO_PI / float(N))));
-        k = ((k % N) + N) % N;
+        dvec2 d = z - m;
+        int k;
+        if (dot(d, d) < 1e-8lf) {
+            k = N; 
+        } else {
+            float ang = atan(float(z.y), float(z.x));
+            k = int(round(ang / (TWO_PI / float(N))));
+            k = ((k % N) + N) % N;
+        }
 
         float t = float(k) / float(N);
         float shade = 0.85 + 0.15 * pow(0.98, float(iter));

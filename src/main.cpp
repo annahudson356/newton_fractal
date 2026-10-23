@@ -1005,19 +1005,25 @@ int main()
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) center_x += pan;
 
         // Feature 2: drag root r0 with the cursor
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            double rx = cursor_wx, ry = cursor_wy;
-            double r2x = rx*rx - ry*ry,   r2y = 2*rx*ry;      // r^2
-            double r4x = r2x*r2x - r2y*r2y, r4y = 2*r2x*r2y;  // r^4
-            root_x = r4x*rx - r4y*ry;                          // r^5 = r^4 * r
-            root_y = r4x*ry + r4y*rx;
+        double root_x = 1e9, root_y = 0.0;
+
+        bool cursor_inside = cur_x >= 0.0 && cur_x < WINDOW_WIDTH &&
+                     cur_y >= 0.0 && cur_y < WINDOW_HEIGHT;
+
+        if (cursor_inside) {
+            double nx =  (cur_x / WINDOW_WIDTH)  * 2.0 - 1.0;
+            double ny = -((cur_y / WINDOW_HEIGHT) * 2.0 - 1.0);
+            root_x = 1.0 + 0.6 * nx;
+            root_y = 0.8 * ny;
+        }else{
+            root_x = 1.0; root_y = 0.0;
         }
 
         // space: reset
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !space_pressed) {
             center_x = center_y = 0.f;
             scale = DEFAULT_SCALE;
-            root_x = 1.f; root_y = 0.f;
+            root_x = 1.0f; root_y = 0.f;
         }
         space_pressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
 
