@@ -1,5 +1,6 @@
 //--------------------------------------------------------------------------------------//
 // PROJECT1: COMPUTE ARTIST
+// Anna Hudson 44277461
 //--------------------------------------------------------------------------------------//
 #define VK_ENABLE_BETA_EXTENSIONS
 #include <vulkan/vulkan.h>
@@ -375,6 +376,13 @@ int main()
         .dynamicRendering = VK_TRUE,
     };
 
+    // Needed for double support without causing validation errors
+    VkPhysicalDeviceFeatures2 features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &vulkan_1_3_features,
+        .features = { .shaderFloat64 = VK_TRUE },
+    };
+
     //presenting a surface (and by extension, using a swapchain) is not core Vulkan but rather a device extension
     std::vector<const char*> device_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
@@ -386,7 +394,8 @@ int main()
     //describe our logical device that serves as the interface between our Vulkan instance and our physical device (GPU)
     VkDeviceCreateInfo device_create_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &vulkan_1_3_features,
+        // changed to match issue with float vs double 
+        .pNext =  &features2,
         .flags = 0,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &device_queue_create_info,
