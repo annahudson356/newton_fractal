@@ -950,7 +950,7 @@ int main()
     // Feature 2 variables needed to go here
     double root_x = 1.0, root_y = 0.0; 
     bool space_pressed = false;
-    double DEFAULT_SCALE = 4.0f / FRAME_HEIGHT;
+    double DEFAULT_SCALE = 4.0 / FRAME_HEIGHT;
     double center_x = 0.f, center_y = 0.f, scale = DEFAULT_SCALE;
 
     uint32_t current_frame = 0;
@@ -987,8 +987,8 @@ int main()
         VK_CHECK(vkBeginCommandBuffer(command_buffers[current_frame], &command_buffer_begin_info));
 
 
-        // delta_ms starts out as start_ms (huge), so clamp for the first frame
-        double dt = fminf((double)delta_ms.count() / 1000.f, 0.1f);
+        // make sure to not round to floats!
+        double dt = fmin((double)delta_ms.count() / 1000.0, 0.1);
 
         double cur_x, cur_y;
         glfwGetCursorPos(window, &cur_x, &cur_y);
@@ -1000,12 +1000,12 @@ int main()
 
         // zoom toward the cursor
         if (scrollwheel_y != 0.0) {
-            double new_scale = scale * powf(0.85f, (double)scrollwheel_y);
+            double new_scale = scale * pow(0.85, scrollwheel_y);
             double ratio = new_scale / scale;
             center_x = cursor_wx + (center_x - cursor_wx) * ratio;
             center_y = cursor_wy + (center_y - cursor_wy) * ratio;
             scale = new_scale;
-           scrollwheel_y= 0.0;
+            scrollwheel_y = 0.0;
         }
 
         // Make it so the arrow keys can be used to pan around the window
@@ -1038,15 +1038,18 @@ int main()
 
         // Pressing space resets the image
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !space_pressed) {
-            center_x = center_y = 0.f;
+            center_x = 0;
+            center_y = 0.0;
             scale = DEFAULT_SCALE;
-            root_x = 1.0f; root_y = 0.f;
+            root_x = 1.0f; 
+            root_y = 0.f;
         }
         space_pressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
 
-        int max_iter = 100 + (int)(30.f * log2f(DEFAULT_SCALE / scale));
+        double depth = fabs(log2(DEFAULT_SCALE / scale));
+        int max_iter = 150 + (int)(30.0 * depth);
+        if (max_iter > 2000) max_iter = 2000;
         if (max_iter < 100) max_iter = 100;
-        if (max_iter > 1000) max_iter = 1000;
 
         PushConstants pc = {
             (int)FRAME_WIDTH, (int)FRAME_HEIGHT,
