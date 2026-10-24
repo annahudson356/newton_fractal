@@ -7,11 +7,10 @@ This application is an implementation of a Newton Fractal with Nova-style behavi
 
 ## Features
 
-To move around the image, use the arrow keys.
-To reset the image, press the space bar
-To swirl the colors around, move your mouse within the image window.
-To zoom, use the scroll wheel
-
+- To move around the image, use the arrow keys.
+- To reset the image, press the space bar
+- To swirl the colors around, move your mouse within the image window.
+- To zoom, use the scroll wheel
 
 ## Authors
 Anna Hudson

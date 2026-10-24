@@ -37,7 +37,7 @@ layout(push_constant) uniform PushConstants {
     double scale;
     double root_x;
     double root_y;
-    int   max_iter;
+    int max_iter;
 } pc;
 
 // Controls how quickly the image scales down
@@ -79,11 +79,7 @@ void main()
     dvec2 z = dvec2(
         pc.center_x + (double(pixel.x) + 0.5lf - 0.5lf * double(pc.width))  * pc.scale,
         pc.center_y - (double(pixel.y) + 0.5lf - 0.5lf * double(pc.height)) * pc.scale);
-    dvec2 m = dvec2(pc.root_x, pc.root_y);
-    dvec2 one = dvec2(1.0lf, 0.0lf);
     dvec2 Ac = dvec2(pc.root_x, pc.root_y);  
-
-    bool converged = false;
     int iter = 0;
 
     for (; iter < pc.max_iter; ++iter) {
@@ -94,23 +90,17 @@ void main()
         dvec2 stepv = cmul(Ac, (z - cinv(z4)) / double(N));
         z -= stepv;
 
-        if (dot(stepv, stepv) < 1e-24lf) { converged = true; break; }
+        if (dot(stepv, stepv) < 1e-24lf) break;
     }
 
-    vec3 rgb = vec3(0.0);
-    dvec2 d = z - m;
-    int k;
-    if (dot(d, d) < 1e-8lf) {
-        k = N; 
-    } else {
-        float ang = atan(float(z.y), float(z.x));
-        k = int(round(ang / (TWO_PI / float(N))));
-        k = ((k % N) + N) % N;
-    }
+    float ang = atan(float(z.y), float(z.x));
+    int k = int(round(ang / (TWO_PI / float(N))));
+    k = ((k % N) + N) % N;
+
 
     float t = float(k) / float(N);
     float shade = 0.85 + 0.15 * pow(0.98, float(iter));
-    rgb = palette(t);
+    vec3 rgb = palette(t);
 
     imageStore(out_image, pixel, vec4(rgb, 1.0));
 }
