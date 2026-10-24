@@ -960,8 +960,6 @@ int main()
     std::chrono::milliseconds last_frame_ms = start_ms;
     std::chrono::milliseconds delta_ms = start_ms;
 
-
-
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -1015,8 +1013,7 @@ int main()
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) center_x -= pan;
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) center_x += pan;
 
-        // Feature 2: Make nova swirl based on mouse position
-
+        // Feature 2: Make nova "swirl" based on mouse position
         bool cursor_inside = cur_x >= 0.0 && cur_x < WINDOW_WIDTH &&
                      cur_y >= 0.0 && cur_y < WINDOW_HEIGHT;
 
@@ -1165,6 +1162,7 @@ int main()
             .srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
             .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
 
+            // make sure to set pipeline to use the shader correctly
             .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 

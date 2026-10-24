@@ -39,10 +39,11 @@ layout(push_constant) uniform PushConstants {
     double root_y;
     int max_iter;
 } pc;
+// Newton Fractal!
+// All math is based on the Wikipedia article linked in my report
 
 // Controls how quickly the image scales down
 float A = 1;
-
 float TWO_PI = 6.28318530718;
 int   N = 5;
 
@@ -76,17 +77,20 @@ void main()
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     if (pixel.x >= pc.width || pixel.y >= pc.height) return;
 
+    // Generate values needed for the fractal iterations
     dvec2 z = dvec2(
         pc.center_x + (double(pixel.x) + 0.5lf - 0.5lf * double(pc.width))  * pc.scale,
         pc.center_y - (double(pixel.y) + 0.5lf - 0.5lf * double(pc.height)) * pc.scale);
     dvec2 Ac = dvec2(pc.root_x, pc.root_y);  
     int iter = 0;
 
+    // fractal iterations!
     for (; iter < pc.max_iter; ++iter) {
         dvec2 z2 = cmul(z, z);
         dvec2 z4 = cmul(z2, z2);
 
-        // Newton step for z^5 - 1:  (z - 1/z^4) / 5, scaled by complex A
+        // Newton step for z^5 - 1
+        // (z - 1/z^4) / 5 * A
         dvec2 stepv = cmul(Ac, (z - cinv(z4)) / double(N));
         z -= stepv;
 
@@ -97,9 +101,9 @@ void main()
     int k = int(round(ang / (TWO_PI / float(N))));
     k = ((k % N) + N) % N;
 
-
     float t = float(k) / float(N);
     float shade = 0.85 + 0.15 * pow(0.98, float(iter));
+    // color based on the pastel palette defined above.
     vec3 rgb = palette(t);
 
     imageStore(out_image, pixel, vec4(rgb, 1.0));
